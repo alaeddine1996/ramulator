@@ -6,6 +6,7 @@
 #include "DRAM.h"
 #include "Statistics.h"
 #include <cstdio>
+#include <vector>
 #include <cstdlib>
 #include <cstring>
 #include <stdlib.h>
@@ -114,7 +115,7 @@ void run_cputrace(const Config& configs, Memory<T, Controller>& memory, const st
     warmup_complete = true;
     printf("Warmup complete! Resetting stats...\n");
     Stats::reset_stats();
-    proc.reset_stats();
+    proc.reset_stats(); 
     assert(proc.get_insts() == 0);
 
     printf("Starting the simulation...\n");
@@ -177,18 +178,114 @@ void start_run(const Config& configs, T* spec, const vector<const char*>& files)
 
 int main(int argc, const char *argv[])
 {
-    if (argc < 2) {
-        printf("Usage: %s <configs-file> --mode=cpu,dram [--stats <filename>] <trace-filename1> <trace-filename2>\n"
-            "Example: %s ramulator-configs.cfg --mode=cpu cpu.trace cpu.trace\n", argv[0], argv[0]);
-        return 0;
+    if (argc <= 2) {
+          printf("Usage: %s <configs-file> --mode=cpu,dram [--stats <filename>] <trace-filename1> <trace-filename2>\n"
+              "Example: %s ramulator-configs.cfg --mode=cpu cpu.trace cpu.trace\n", argv[0], argv[0]);
+          return 0;
+      
+
+      Config configs(argv[1]);
+
+      const std::string& standard = configs["standard"];
+      assert(standard != "" || "DRAM standard should be specified.");
+
+      const char *trace_type = strstr(argv[2], "=");
+      trace_type++;
+      if (strcmp(trace_type, "cpu") == 0) {
+        configs.add("trace_type", "CPU");
+      } else if (strcmp(trace_type, "dram") == 0) {
+        configs.add("trace_type", "DRAM");
+      } else {
+        printf("invalid trace type: %s\n", trace_type);
+        assert(false);
+      }
+
+      int trace_start = 3;
+      string stats_out;
+      if (strcmp(argv[trace_start], "--stats") == 0) {
+        Stats::statlist.output(argv[trace_start+1]);
+        stats_out = argv[trace_start+1];
+        trace_start += 2;
+      } else {
+        Stats::statlist.output(standard+".stats");
+        stats_out = standard + string(".stats");
+      }
+
+      // A separate file defines mapping for easy config.
+      if (strcmp(argv[trace_start], "--mapping") == 0) {
+        configs.add("mapping", argv[trace_start+1]);
+        trace_start += 2;
+      } else {
+        configs.add("mapping", "defaultmapping");
+      }
+
+      std::vector<const char*> files(&argv[trace_start], &argv[argc]);
+      configs.set_core_num(argc - trace_start);
+
+      if (standard == "DDR3") {
+        DDR3* ddr3 = new DDR3(configs["org"], configs["speed"]);
+      } else if (standard == "DDR4") {
+        DDR4* ddr4 = new DDR4(configs["org"], configs["speed"]);
+        start_run(configs, ddr4, files);
+      } else if (standard == "SALP-MASA") {
+        SALP* salp8 = new SALP(configs["org"], configs["speed"], "SALP-MASA", configs.get_subarrays());
+        start_run(configs, salp8, files);
+      } else if (standard == "LPDDR3") {
+        LPDDR3* lpddr3 = new LPDDR3(configs["org"], configs["speed"]);
+        start_run(configs, lpddr3, files);
+      } else if (standard == "LPDDR4") {
+        // total cap: 2GB, 1/2 of others
+        LPDDR4* lpddr4 = new LPDDR4(configs["org"], configs["speed"]);
+        start_run(configs, lpddr4, files);
+      } else if (standard == "GDDR5") {
+        GDDR5* gddr5 = new GDDR5(configs["org"], configs["speed"]);
+        start_run(configs, gddr5, files);
+      } else if (standard == "HBM") {
+        HBM* hbm = new HBM(configs["org"], configs["speed"]);
+        start_run(configs, hbm, files);
+      } else if (standard == "WideIO") {
+        // total cap: 1GB, 1/4 of others
+        WideIO* wio = new WideIO(configs["org"], configs["speed"]);
+        start_run(configs, wio, files);
+      } else if (standard == "WideIO2") {
+        // total cap: 2GB, 1/2 of others
+        WideIO2* wio2 = new WideIO2(configs["org"], configs["speed"], configs.get_channels());
+        wio2->channel_width *= 2;
+        start_run(configs, wio2, files);
+      } else if (standard == "STTMRAM") {
+        STTMRAM* sttmram = new STTMRAM(configs["org"], configs["speed"]);
+        start_run(configs, sttmram, files);
+      } else if (standard == "PCM") {
+        PCM* pcm = new PCM(configs["org"], configs["speed"]);
+        start_run(configs, pcm, files);
+      }
+      // Various refresh mechanisms
+        else if (standard == "DSARP") {
+        DSARP* dsddr3_dsarp = new DSARP(configs["org"], configs["speed"], DSARP::Type::DSARP, configs.get_subarrays());
+        start_run(configs, dsddr3_dsarp, files);
+      } else if (standard == "ALDRAM") {
+        ALDRAM* aldram = new ALDRAM(configs["org"], configs["speed"]);
+        start_run(configs, aldram, files);
+      } else if (standard == "TLDRAM") {
+        TLDRAM* tldram = new TLDRAM(configs["org"], configs["speed"], configs.get_subarrays());
+        start_run(configs, tldram, files);
+      }
     }
 
-    Config configs(argv[1]);
+    /*we are excluding the case of inputting config files ony, specially ./ramulator config1.cfg config2.cfg
+     we can interact with the user asking him him to input number of config files N:=X
+         New constructor idea
+         for N config files , you can overload the config constructor by a vector of N argv's, we are trying two technologies for now
+        Config configs(argv[1],argv[2]);
 
-    const std::string& standard = configs["standard"];
+       same for standard vector it can become genereic
+    //const std::vector&<const string> standard;
+    //standard = configs["standard"];*/
+
+
     assert(standard != "" || "DRAM standard should be specified.");
-
-    const char *trace_type = strstr(argv[2], "=");
+    // trce type, output location , mapping can be shareh with the mormal as the part below 
+    const char *trace_type = strstr(argv[3], "=");
     trace_type++;
     if (strcmp(trace_type, "cpu") == 0) {
       configs.add("trace_type", "CPU");
@@ -198,8 +295,8 @@ int main(int argc, const char *argv[])
       printf("invalid trace type: %s\n", trace_type);
       assert(false);
     }
-
-    int trace_start = 3;
+    //argc-2 gives a more generic aspect to get the stats or mapping features , whatever N args involved
+    int trace_start = argc-2;
     string stats_out;
     if (strcmp(argv[trace_start], "--stats") == 0) {
       Stats::statlist.output(argv[trace_start+1]);
@@ -221,57 +318,78 @@ int main(int argc, const char *argv[])
     std::vector<const char*> files(&argv[trace_start], &argv[argc]);
     configs.set_core_num(argc - trace_start);
 
-    if (standard == "DDR3") {
-      DDR3* ddr3 = new DDR3(configs["org"], configs["speed"]);
-      start_run(configs, ddr3, files);
-    } else if (standard == "DDR4") {
-      DDR4* ddr4 = new DDR4(configs["org"], configs["speed"]);
-      start_run(configs, ddr4, files);
-    } else if (standard == "SALP-MASA") {
-      SALP* salp8 = new SALP(configs["org"], configs["speed"], "SALP-MASA", configs.get_subarrays());
-      start_run(configs, salp8, files);
-    } else if (standard == "LPDDR3") {
-      LPDDR3* lpddr3 = new LPDDR3(configs["org"], configs["speed"]);
-      start_run(configs, lpddr3, files);
-    } else if (standard == "LPDDR4") {
-      // total cap: 2GB, 1/2 of others
-      LPDDR4* lpddr4 = new LPDDR4(configs["org"], configs["speed"]);
-      start_run(configs, lpddr4, files);
-    } else if (standard == "GDDR5") {
-      GDDR5* gddr5 = new GDDR5(configs["org"], configs["speed"]);
-      start_run(configs, gddr5, files);
-    } else if (standard == "HBM") {
-      HBM* hbm = new HBM(configs["org"], configs["speed"]);
-      start_run(configs, hbm, files);
-    } else if (standard == "WideIO") {
-      // total cap: 1GB, 1/4 of others
-      WideIO* wio = new WideIO(configs["org"], configs["speed"]);
-      start_run(configs, wio, files);
-    } else if (standard == "WideIO2") {
-      // total cap: 2GB, 1/2 of others
-      WideIO2* wio2 = new WideIO2(configs["org"], configs["speed"], configs.get_channels());
-      wio2->channel_width *= 2;
-      start_run(configs, wio2, files);
-    } else if (standard == "STTMRAM") {
-      STTMRAM* sttmram = new STTMRAM(configs["org"], configs["speed"]);
-      start_run(configs, sttmram, files);
-    } else if (standard == "PCM") {
-      PCM* pcm = new PCM(configs["org"], configs["speed"]);
-      start_run(configs, pcm, files);
-    }
-    // Various refresh mechanisms
-      else if (standard == "DSARP") {
-      DSARP* dsddr3_dsarp = new DSARP(configs["org"], configs["speed"], DSARP::Type::DSARP, configs.get_subarrays());
-      start_run(configs, dsddr3_dsarp, files);
-    } else if (standard == "ALDRAM") {
-      ALDRAM* aldram = new ALDRAM(configs["org"], configs["speed"]);
-      start_run(configs, aldram, files);
-    } else if (standard == "TLDRAM") {
-      TLDRAM* tldram = new TLDRAM(configs["org"], configs["speed"], configs.get_subarrays());
-      start_run(configs, tldram, files);
-    }
 
+    //for (std::vector<>::iterator i = standard.begin(); i != standard.end(); ++i)
+    //{
+    std::vector<Controller<T>*> ctrls;
+
+    for (i = 1; i<3; i++){
+        
+        Config configs(argv[i]);
+        const std::string& standard = configs["standard"];
+        int C = configs.get_channels(), R = configs.get_ranks();
+       if (standard == "DDR3") {
+        DDR3* ddr3 = new DDR3(configs["org"], configs["speed"]);
+       spec = ddr3;
+      } else if (standard == "DDR4") {
+        DDR4* ddr4 = new DDR4(configs["org"], configs["speed"]);
+        spec =  ddr4;
+      } else if (standard == "SALP-MASA") {
+        SALP* salp8 = new SALP(configs["org"], configs["speed"], "SALP-MASA", configs.get_subarrays());
+       
+      } else if (standard == "LPDDR3") {
+        LPDDR3* lpddr3 = new LPDDR3(configs["org"], configs["speed"]);
+        
+      } else if (standard == "LPDDR4") {
+        // total cap: 2GB, 1/2 of others
+        LPDDR4* lpddr4 = new LPDDR4(configs["org"], configs["speed"]);
+       
+      } else if (standard == "GDDR5") {
+        GDDR5* gddr5 = new GDDR5(configs["org"], configs["speed"]);
+       
+      } else if (standard == "HBM") {
+        HBM* hbm = new HBM(configs["org"], configs["speed"]);
+       
+      } else if (standard == "WideIO") {
+        // total cap: 1GB, 1/4 of others
+        WideIO* wio = new WideIO(configs["org"], configs["speed"]);
+       
+      } else if (standard == "WideIO2") {
+        // total cap: 2GB, 1/2 of others
+        WideIO2* wio2 = new WideIO2(configs["org"], configs["speed"], configs.get_channels());
+        wio2->channel_width *= 2;
+       
+      } else if (standard == "STTMRAM") {
+        STTMRAM* sttmram = new STTMRAM(configs["org"], configs["speed"]);
+       
+      } else if (standard == "PCM") {
+        PCM* pcm = new PCM(configs["org"], configs["speed"]);
+       spec = pcm;
+      }
+      // Various refresh mechanisms
+        else if (standard == "DSARP") {
+        DSARP* dsddr3_dsarp = new DSARP(configs["org"], configs["speed"], DSARP::Type::DSARP, configs.get_subarrays());
+       
+      } else if (standard == "ALDRAM") {
+        ALDRAM* aldram = new ALDRAM(configs["org"], configs["speed"]);
+       
+      } else if (standard == "TLDRAM") {
+        TLDRAM* tldram = new TLDRAM(configs["org"], configs["speed"], configs.get_subarrays());
+       
+      }
+       
+        spec->set_channel_number(C);
+        spec->set_rank_number(R);
+       DRAM<T>* channel = new DRAM<T>(spec, T::Level::Channel);
+      channel->id = i;
+      channel->regStats("");
+      Controller<T>* ctrl = new Controller<T>(configs, channel);
+      ctrls.push_back(ctrl);
+        //}
+  
+    }
     printf("Simulation done. Statistics written to %s\n", stats_out.c_str());
 
     return 0;
 }
+
