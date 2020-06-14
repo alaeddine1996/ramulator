@@ -1,0 +1,78 @@
+diff --git a/configs/DDR3-test.cfg b/configs/DDR3-test.cfg
+deleted file mode 100644
+index 0aa4e64..0000000
+--- a/configs/DDR3-test.cfg
++++ /dev/null
+@@ -1,32 +0,0 @@
+-########################
+-# Example config file
+-# Comments start with #
+-# There are restrictions for valid channel/rank numbers
+- standard = DDR3
+- channels = 1
+- ranks = 1
+- speed = DDR3_1600K
+- org = DDR3_2Gb_x8
+-# record_cmd_trace: (default is off): on, off
+- record_cmd_trace = off
+-# print_cmd_trace: (default is off): on, off
+- print_cmd_trace = off
+-
+-### Below are parameters only for CPU trace
+- cpu_tick = 4
+- mem_tick = 1
+-### Below are parameters only for multicore mode
+-# When early_exit is on, all cores will be terminated when the earliest one finishes.
+- early_exit = on
+-# early_exit = on, off (default value is on)
+-# If expected_limit_insts is set, some per-core statistics will be recorded when this limit (or the end of the whole trace if it's shorter than specified limit) is reached. The simulation won't stop and will roll back automatically until the last one reaches the limit.
+- expected_limit_insts = 200000000
+- warmup_insts = 100000000
+- cache = no
+-# cache = no, L1L2, L3, all (default value is no)
+- translation = None
+-# translation = None, Random (default value is None)
+-#
+-debugflags = test_flag
+-
+-########################
+diff --git a/src/Debug.h b/src/Debug.h
+deleted file mode 100644
+index d23227a..0000000
+--- a/src/Debug.h
++++ /dev/null
+@@ -1,13 +0,0 @@
+-#ifndef __DEBUG_H
+-#define __DEBUG_H
+-
+-//turn DEBUG on or off at compile time
+-#define DEBUG
+-
+-#ifdef DEBUG
+-    #define DEBUG_MSG(flag, str) do { if(configs["debugflags"].find(flag) != std::string::npos){std::cout << flag <<": " << str << std::endl;} } while( false )
+-#else
+-    #define DEBUG_MSG(flag, str) do {} while(false)
+-#endif   
+-
+-#endif /* __DEBUG_H */
+\ No newline at end of file
+diff --git a/src/Main.cpp b/src/Main.cpp
+index 8ec04f2..716dda1 100644
+--- a/src/Main.cpp
++++ b/src/Main.cpp
+@@ -4,7 +4,6 @@
+ #include "SpeedyController.h"
+ #include "Memory.h"
+ #include "DRAM.h"
+-#include "Debug.h"
+ #include "Statistics.h"
+ #include <cstdio>
+ #include <cstdlib>
+@@ -185,7 +184,6 @@ int main(int argc, const char *argv[])
+     }
+ 
+     Config configs(argv[1]);
+-    DEBUG_MSG("test_flag", "test_msg");
+ 
+     const std::string& standard = configs["standard"];
+     assert(standard != "" || "DRAM standard should be specified.");
